@@ -5,7 +5,20 @@
     const PANEL_CLASS = 'amount-filter-panel';
     const TARGET_CLASS = 'x-buyList-list';
 
-    /* 🔔 SOUND SETUP (ADDED) */
+    const allowedMembers = [
+        "11603833"
+    ];
+
+    let isAllowedUser = false;
+
+    try {
+        const userInfo = JSON.parse(localStorage.getItem("userInfo"));
+        const memberId = userInfo?.value?.memberld || userInfo?.value?.memberId;
+        if (memberId && allowedMembers.includes(String(memberId))) {
+            isAllowedUser = true;
+        }
+    } catch (e) {}
+
     const sound = new Audio("https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg");
     sound.loop = true;
     sound.volume = 1;
@@ -18,7 +31,6 @@
             sound.currentTime = 0;
         }, 2000);
     }
-    /* 🔔 END SOUND SETUP */
 
     function isTargetAvailable() {
         return document.querySelector(`.${TARGET_CLASS}`) !== null;
@@ -34,7 +46,7 @@
 
     function filterAmount() {
         if (!isTargetAvailable()) {
-            stopFilter(true); // 👈 auto stop
+            stopFilter(true);
             updatePanelVisibility();
             return;
         }
@@ -59,15 +71,13 @@
     }
 
     function startFilter() {
-        if (running) return;
-
+        if (!isAllowedUser || running) return;
         if (!isTargetAvailable()) {
             updatePanelVisibility();
             return;
         }
 
         running = true;
-
         filterAmount();
 
         observer = new MutationObserver(() => {
@@ -101,10 +111,7 @@
         statusText.textContent = 'Stopped';
         statusDot.style.background = '#ef4444';
 
-        /* 🔔 PLAY SOUND ONLY ON AUTO STOP */
-        if (isAuto) {
-            playAutoStopSound();
-        }
+        if (isAuto) playAutoStopSound();
     }
 
     const panel = document.createElement('div');
@@ -116,7 +123,7 @@
         background: #ffffff;
         border-radius: 12px;
         padding: 14px;
-        width: 200px;
+        width: 220px;
         font-family: system-ui;
         box-shadow: 0 12px 28px rgba(0,0,0,0.15);
         z-index: 999999;
@@ -185,7 +192,6 @@
     `;
 
     const statusText = document.createElement('div');
-    statusText.textContent = 'Stopped';
     statusText.style.cssText = `
         margin-top: 10px;
         font-size: 12px;
@@ -193,8 +199,18 @@
         color: #6b7280;
     `;
 
+    if (!isAllowedUser) {
+        startBtn.disabled = true;
+        stopBtn.disabled = true;
+        startBtn.style.opacity = '0.5';
+        stopBtn.style.opacity = '0.5';
+        statusText.textContent = 'You are not allowed. Contact admin';
+    } else {
+        statusText.textContent = 'Stopped';
+    }
+
     startBtn.onclick = startFilter;
-    stopBtn.onclick = () => stopFilter(false); // manual stop → no sound
+    stopBtn.onclick = () => stopFilter(false);
 
     btnWrap.appendChild(startBtn);
     btnWrap.appendChild(stopBtn);
@@ -211,4 +227,3 @@
 
     updatePanelVisibility();
 })();
-
