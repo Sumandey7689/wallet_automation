@@ -1,37 +1,53 @@
-(function () {
+(async function () {
     let observer = null;
     let running = false;
 
     const PANEL_CLASS = 'amount-filter-panel';
     const TARGET_CLASS = 'x-buyList-list';
 
-    const allowedMembers = [
-        "11603832",
-        "21093431",
-        "21035342",
-        "21003132",
-        "20906529",
-        "20578430",
-        "21109910",
-        "21094933",
-        "21092355",
-        "20969030",
-        "20968470",
-        "20918881",
-        "20724523",
-        "11577667",
-        "11664689"
-    ];
-
     let isAllowedUser = false;
 
-    try {
-        const userInfo = JSON.parse(localStorage.getItem("userInfo"));
-        const memberId = userInfo?.value?.memberld || userInfo?.value?.memberId;
-        if (memberId && allowedMembers.includes(String(memberId))) {
-            isAllowedUser = true;
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = reject;
+            document.head.appendChild(s);
+        });
+    }
+
+    if (!window.firebase) {
+        await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
+        await loadScript("https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js");
+    }
+
+    if (!firebase.apps.length) {
+        firebase.initializeApp({
+          apiKey:"AIzaSyCI7WjTsCfYrFU0U38y84PvSE1ysoOmc68",
+          projectId:"wallet-automation-a59da"
+        });
+    }
+
+    async function checkAllowedFromFirebase() {
+        try {
+            const userInfo = JSON.parse(localStorage.getItem("userInfo"));
+            const memberId = userInfo?.value?.memberId || userInfo?.value?.memberld;
+            if (!memberId) return false;
+
+            const snap = await firebase
+                .firestore()
+                .collection("members")
+                .where("walletUserId", "==", String(memberId))
+                .where("active", "==", true)
+                .limit(1)
+                .get();
+
+            return !snap.empty;
+        } catch (e) {
+            return false;
         }
-    } catch (e) {}
+    }
 
     const sound = new Audio("https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg");
     sound.loop = true;
@@ -99,10 +115,7 @@
             filterAmount();
         });
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        observer.observe(document.body, { childList: true, subtree: true });
 
         statusText.textContent = 'Active';
         statusDot.style.background = '#22c55e';
@@ -213,12 +226,14 @@
         color: #6b7280;
     `;
 
+    isAllowedUser = await checkAllowedFromFirebase();
+
     if (!isAllowedUser) {
         startBtn.disabled = true;
         stopBtn.disabled = true;
         startBtn.style.opacity = '0.5';
         stopBtn.style.opacity = '0.5';
-        statusText.textContent = 'You are not allowed. Contact admin';
+        statusText.textContent = 'Access denied';
     } else {
         statusText.textContent = 'Stopped';
     }
