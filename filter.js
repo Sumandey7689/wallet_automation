@@ -2,6 +2,10 @@
     let observer = null;
     let running = false;
 
+    let autoItemInterval = null;
+    let autoButtonInterval = null;
+    let stopRowClicked = false;
+
     const PANEL_CLASS = 'amount-filter-panel';
     const TARGET_CLASS = 'x-buyList-list';
 
@@ -24,8 +28,8 @@
 
     if (!firebase.apps.length) {
         firebase.initializeApp({
-          apiKey:"AIzaSyCI7WjTsCfYrFU0U38y84PvSE1ysoOmc68",
-          projectId:"wallet-automation-a59da"
+            apiKey: "AIzaSyCI7WjTsCfYrFU0U38y84PvSE1ysoOmc68",
+            projectId: "wallet-automation-a59da"
         });
     }
 
@@ -44,22 +48,9 @@
                 .get();
 
             return !snap.empty;
-        } catch (e) {
+        } catch {
             return false;
         }
-    }
-
-    const sound = new Audio("https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg");
-    sound.loop = true;
-    sound.volume = 1;
-
-    function playAutoStopSound() {
-        sound.currentTime = 0;
-        sound.play().catch(() => {});
-        setTimeout(() => {
-            sound.pause();
-            sound.currentTime = 0;
-        }, 2000);
     }
 
     function isTargetAvailable() {
@@ -70,10 +61,6 @@
         panel.style.display = isTargetAvailable() ? 'block' : 'none';
     }
 
-    function getAllowedAmount() {
-        return amountInput.value.trim();
-    }
-
     function filterAmount() {
         if (!isTargetAvailable()) {
             stopFilter(true);
@@ -81,64 +68,107 @@
             return;
         }
 
-        const allowed = getAllowedAmount();
+        const allowed = amountInput.value.trim();
 
         document.querySelectorAll(`.${TARGET_CLASS} *`).forEach(el => {
             if (el.closest(`.${PANEL_CLASS}`)) return;
 
-            if (el.innerText && el.innerText.includes('₹')) {
+            if (el.innerText?.includes('₹')) {
                 if (
                     (el.innerText.includes(`₹${allowed}`) || el.innerText.includes(`₹ ${allowed}`)) &&
-                    !el.innerText.includes(`₹${allowed}0`) &&
-                    !el.innerText.includes(`₹ ${allowed}0`)
+                    !el.innerText.includes(`₹${allowed}0`)
                 ) {
                     el.style.display = '';
-                } else if (el.innerText.match(/₹\s*\d+/)) {
+                } else {
                     el.style.display = 'none';
                 }
             }
         });
     }
 
+    function isVisible(el) {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
+    }
+
+    function startAutoItemClick() {
+        if (autoItemInterval) return;
+        autoItemInterval = setInterval(() => {
+            const activeItem = document.querySelector('.item.active');
+            if (activeItem) activeItem.click();
+        }, 1000);
+    }
+
+    function startAutoButtonClick() {
+        if (autoButtonInterval) return;
+        autoButtonInterval = setInterval(() => {
+            document.querySelectorAll('div.x-row.x-row-middle button')
+                .forEach(btn => {
+                    if (isVisible(btn)) btn.click();
+                });
+        }, 300);
+    }
+
+    function stopAutoClicks() {
+        clearInterval(autoItemInterval);
+        clearInterval(autoButtonInterval);
+        autoItemInterval = null;
+        autoButtonInterval = null;
+    }
+
+    // ✅ GUARANTEED ONE-TIME STOP CLICK
+    function clickStopRowOnce() {
+        if (stopRowClicked) return;
+        stopRowClicked = true;
+
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        const interval = setInterval(() => {
+            const el = document.querySelector('div.x-row.x-row-between.bgfreo');
+            if (el) {
+                el.click();
+                clearInterval(interval);
+            } else if (++attempts >= maxAttempts) {
+                clearInterval(interval);
+            }
+        }, 200);
+    }
+
     function startFilter() {
         if (!isAllowedUser || running) return;
-        if (!isTargetAvailable()) {
-            updatePanelVisibility();
-            return;
-        }
+        if (!isTargetAvailable()) return;
 
         running = true;
+        stopRowClicked = false;
+
         filterAmount();
 
-        observer = new MutationObserver(() => {
-            updatePanelVisibility();
-            filterAmount();
-        });
-
+        observer = new MutationObserver(filterAmount);
         observer.observe(document.body, { childList: true, subtree: true });
 
         statusText.textContent = 'Active';
         statusDot.style.background = '#22c55e';
+
+        startAutoItemClick();
+        startAutoButtonClick();
     }
 
     function stopFilter(isAuto = false) {
         if (!running) return;
         running = false;
 
+        stopAutoClicks();
         if (observer) observer.disconnect();
 
-        const target = document.querySelector(`.${TARGET_CLASS}`);
-        if (target) {
-            target.querySelectorAll('*').forEach(el => {
-                if (el.closest(`.${PANEL_CLASS}`)) return;
-                el.style.display = '';
-            });
-        }
+        document.querySelectorAll(`.${TARGET_CLASS} *`).forEach(el => {
+            if (!el.closest(`.${PANEL_CLASS}`)) el.style.display = '';
+        });
+
+        clickStopRowOnce();
 
         statusText.textContent = 'Stopped';
         statusDot.style.background = '#ef4444';
-
-        if (isAuto) playAutoStopSound();
     }
 
     const panel = document.createElement('div');
@@ -147,92 +177,56 @@
         position: fixed;
         bottom: 24px;
         right: 24px;
-        background: #ffffff;
+        background: #fff;
         border-radius: 12px;
         padding: 14px;
         width: 220px;
         font-family: system-ui;
-        box-shadow: 0 12px 28px rgba(0,0,0,0.15);
+        box-shadow: 0 12px 28px rgba(0,0,0,.15);
         z-index: 999999;
         display: none;
     `;
 
     const header = document.createElement('div');
-    header.style.cssText = `
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-        font-weight: 600;
-        font-size: 14px;
-    `;
     header.textContent = 'AR Wallet';
+    header.style.cssText = 'display:flex;justify-content:space-between;font-weight:600;margin-bottom:8px';
 
     const statusDot = document.createElement('span');
-    statusDot.style.cssText = `
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: #ef4444;
-    `;
+    statusDot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#ef4444';
     header.appendChild(statusDot);
 
     const amountInput = document.createElement('input');
     amountInput.type = 'number';
     amountInput.value = '1000';
     amountInput.style.cssText = `
-        width: 100%;
-        padding: 6px 8px;
-        margin-bottom: 10px;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        font-size: 13px;
+        width:100%;
+        padding:8px;
+        margin-bottom:10px;
+        border:1px solid #d1d5db;
+        border-radius:6px;
+        background:#fff;
+        color:#111;
+        font-size:14px;
     `;
 
     const btnWrap = document.createElement('div');
-    btnWrap.style.cssText = `display: flex; gap: 8px;`;
+    btnWrap.style.cssText = 'display:flex;gap:8px';
 
     const startBtn = document.createElement('button');
     startBtn.textContent = 'Start';
-    startBtn.style.cssText = `
-        flex: 1;
-        background: #22c55e;
-        color: #fff;
-        border: none;
-        border-radius: 8px;
-        padding: 8px 0;
-        font-size: 13px;
-        cursor: pointer;
-    `;
+    startBtn.style.cssText = 'flex:1;background:#22c55e;color:#fff;border:none;padding:8px;border-radius:8px';
 
     const stopBtn = document.createElement('button');
     stopBtn.textContent = 'Stop';
-    stopBtn.style.cssText = `
-        flex: 1;
-        background: #ef4444;
-        color: #fff;
-        border: none;
-        border-radius: 8px;
-        padding: 8px 0;
-        font-size: 13px;
-        cursor: pointer;
-    `;
+    stopBtn.style.cssText = 'flex:1;background:#ef4444;color:#fff;border:none;padding:8px;border-radius:8px';
 
     const statusText = document.createElement('div');
-    statusText.style.cssText = `
-        margin-top: 10px;
-        font-size: 12px;
-        text-align: center;
-        color: #6b7280;
-    `;
+    statusText.style.cssText = 'margin-top:10px;font-size:12px;text-align:center';
 
     isAllowedUser = await checkAllowedFromFirebase();
 
     if (!isAllowedUser) {
-        startBtn.disabled = true;
-        stopBtn.disabled = true;
-        startBtn.style.opacity = '0.5';
-        stopBtn.style.opacity = '0.5';
+        startBtn.disabled = stopBtn.disabled = true;
         statusText.textContent = 'Access denied';
     } else {
         statusText.textContent = 'Stopped';
@@ -241,18 +235,12 @@
     startBtn.onclick = startFilter;
     stopBtn.onclick = () => stopFilter(false);
 
-    btnWrap.appendChild(startBtn);
-    btnWrap.appendChild(stopBtn);
-
-    panel.appendChild(header);
-    panel.appendChild(amountInput);
-    panel.appendChild(btnWrap);
-    panel.appendChild(statusText);
-
+    btnWrap.append(startBtn, stopBtn);
+    panel.append(header, amountInput, btnWrap, statusText);
     document.body.appendChild(panel);
 
-    const globalObserver = new MutationObserver(updatePanelVisibility);
-    globalObserver.observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(updatePanelVisibility)
+        .observe(document.body, { childList: true, subtree: true });
 
     updatePanelVisibility();
 })();
