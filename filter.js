@@ -11,6 +11,23 @@
 
     let isAllowedUser = false;
 
+    /* 🔊 SOUND SETUP (3 seconds only) */
+    const stopSound = new Audio(
+        "https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg"
+    );
+    stopSound.volume = 1;
+
+    function playStopSound() {
+        stopSound.currentTime = 0;
+        stopSound.play().catch(() => {});
+
+        // 🔴 force stop after 3 seconds
+        setTimeout(() => {
+            stopSound.pause();
+            stopSound.currentTime = 0;
+        }, 3000);
+    }
+
     function loadScript(src) {
         return new Promise((resolve, reject) => {
             const s = document.createElement("script");
@@ -39,8 +56,7 @@
             const memberId = userInfo?.value?.memberId || userInfo?.value?.memberld;
             if (!memberId) return false;
 
-            const snap = await firebase
-                .firestore()
+            const snap = await firebase.firestore()
                 .collection("members")
                 .where("walletUserId", "==", String(memberId))
                 .where("active", "==", true)
@@ -72,23 +88,19 @@
 
         document.querySelectorAll(`.${TARGET_CLASS} *`).forEach(el => {
             if (el.closest(`.${PANEL_CLASS}`)) return;
-
             if (el.innerText?.includes('₹')) {
-                if (
-                    (el.innerText.includes(`₹${allowed}`) || el.innerText.includes(`₹ ${allowed}`)) &&
+                el.style.display =
+                    el.innerText.includes(`₹${allowed}`) &&
                     !el.innerText.includes(`₹${allowed}0`)
-                ) {
-                    el.style.display = '';
-                } else {
-                    el.style.display = 'none';
-                }
+                        ? ''
+                        : 'none';
             }
         });
     }
 
     function isVisible(el) {
         const r = el.getBoundingClientRect();
-        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
+        return r.width > 0 && r.height > 0 && r.top < window.innerHeight && r.bottom > 0;
     }
 
     function startAutoItemClick() {
@@ -116,21 +128,18 @@
         autoButtonInterval = null;
     }
 
-    // ✅ GUARANTEED ONE-TIME STOP CLICK
     function clickStopRowOnce() {
         if (stopRowClicked) return;
         stopRowClicked = true;
 
-        let attempts = 0;
-        const maxAttempts = 10;
-
-        const interval = setInterval(() => {
+        let tries = 0;
+        const timer = setInterval(() => {
             const el = document.querySelector('div.x-row.x-row-between.bgfreo');
             if (el) {
                 el.click();
-                clearInterval(interval);
-            } else if (++attempts >= maxAttempts) {
-                clearInterval(interval);
+                clearInterval(timer);
+            } else if (++tries >= 10) {
+                clearInterval(timer);
             }
         }, 200);
     }
@@ -161,16 +170,14 @@
         stopAutoClicks();
         if (observer) observer.disconnect();
 
-        document.querySelectorAll(`.${TARGET_CLASS} *`).forEach(el => {
-            if (!el.closest(`.${PANEL_CLASS}`)) el.style.display = '';
-        });
-
         clickStopRowOnce();
+        playStopSound(); // 🔊 plays for exactly 3 seconds
 
         statusText.textContent = 'Stopped';
         statusDot.style.background = '#ef4444';
     }
 
+    /* UI */
     const panel = document.createElement('div');
     panel.className = PANEL_CLASS;
     panel.style.cssText = `
@@ -224,16 +231,10 @@
     statusText.style.cssText = 'margin-top:10px;font-size:12px;text-align:center';
 
     isAllowedUser = await checkAllowedFromFirebase();
-
-    if (!isAllowedUser) {
-        startBtn.disabled = stopBtn.disabled = true;
-        statusText.textContent = 'Access denied';
-    } else {
-        statusText.textContent = 'Stopped';
-    }
+    statusText.textContent = isAllowedUser ? 'Stopped' : 'Access denied';
 
     startBtn.onclick = startFilter;
-    stopBtn.onclick = () => stopFilter(false);
+    stopBtn.onclick = stopFilter;
 
     btnWrap.append(startBtn, stopBtn);
     panel.append(header, amountInput, btnWrap, statusText);
