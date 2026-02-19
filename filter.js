@@ -11,7 +11,7 @@
 
     let isAllowedUser = false;
 
-    /* 🔊 SOUND SETUP (3 seconds only) */
+    /* 🔊 SOUND SETUP (3 seconds only, auto-stop only) */
     const stopSound = new Audio(
         "https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg"
     );
@@ -21,7 +21,6 @@
         stopSound.currentTime = 0;
         stopSound.play().catch(() => {});
 
-        // 🔴 force stop after 3 seconds
         setTimeout(() => {
             stopSound.pause();
             stopSound.currentTime = 0;
@@ -79,7 +78,7 @@
 
     function filterAmount() {
         if (!isTargetAvailable()) {
-            stopFilter(true);
+            stopFilter(true); // 🔥 AUTO STOP
             updatePanelVisibility();
             return;
         }
@@ -171,7 +170,11 @@
         if (observer) observer.disconnect();
 
         clickStopRowOnce();
-        playStopSound(); // 🔊 plays for exactly 3 seconds
+
+        // 🔊 PLAY SOUND ONLY ON AUTO STOP
+        if (isAuto) {
+            playStopSound();
+        }
 
         statusText.textContent = 'Stopped';
         statusDot.style.background = '#ef4444';
@@ -234,7 +237,7 @@
     statusText.textContent = isAllowedUser ? 'Stopped' : 'Access denied';
 
     startBtn.onclick = startFilter;
-    stopBtn.onclick = stopFilter;
+    stopBtn.onclick = () => stopFilter(false); // ❌ manual stop = no sound
 
     btnWrap.append(startBtn, stopBtn);
     panel.append(header, amountInput, btnWrap, statusText);
