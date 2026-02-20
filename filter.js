@@ -107,7 +107,7 @@
         autoItemInterval = setInterval(() => {
             const activeItem = document.querySelector('.item.active');
             if (activeItem) activeItem.click();
-        }, 1000);
+        }, 1300);
     }
 
     function startAutoButtonClick() {
