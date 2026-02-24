@@ -133,7 +133,7 @@
 
         let tries = 0;
         const timer = setInterval(() => {
-            const el = document.querySelector('div.x-row.x-row-between.bgfreo');
+            const el = document.querySelector('div.x-row.x-row-between.bgairtel');
             if (el) {
                 el.click();
                 clearInterval(timer);
