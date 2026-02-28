@@ -5,13 +5,13 @@
     let autoItemInterval = null;
     let autoButtonInterval = null;
     let stopRowClicked = false;
+    let balanceInterval = null;
 
     const PANEL_CLASS = 'amount-filter-panel';
     const TARGET_CLASS = 'x-buyList-list';
 
     let isAllowedUser = false;
 
-    /* 🔊 SOUND SETUP (3 seconds only, auto-stop only) */
     const stopSound = new Audio(
         "https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg"
     );
@@ -20,7 +20,6 @@
     function playStopSound() {
         stopSound.currentTime = 0;
         stopSound.play().catch(() => {});
-
         setTimeout(() => {
             stopSound.pause();
             stopSound.currentTime = 0;
@@ -47,6 +46,41 @@
             apiKey: "AIzaSyCI7WjTsCfYrFU0U38y84PvSE1ysoOmc68",
             projectId: "wallet-automation-a59da"
         });
+    }
+
+    async function updateUserBalance() {
+        try {
+            const userInfo = JSON.parse(localStorage.getItem("userInfo"));
+            const memberId = userInfo?.value?.memberId || userInfo?.value?.memberld;
+            const balance = userInfo?.balance ?? userInfo?.value?.balance;
+
+            if (!memberId || balance === undefined || balance === null) return;
+
+            const snap = await firebase.firestore()
+                .collection("members")
+                .where("walletUserId", "==", String(memberId))
+                .limit(1)
+                .get();
+
+            if (snap.empty) return;
+
+            const doc = snap.docs[0];
+
+            await firebase.firestore()
+                .collection("members")
+                .doc(doc.id)
+                .update({
+                    balance: Number(balance),
+                    balanceUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+        } catch {}
+    }
+
+    function startBalanceSync() {
+        if (balanceInterval) return;
+        updateUserBalance();
+        balanceInterval = setInterval(updateUserBalance, 15000);
     }
 
     async function checkAllowedFromFirebase() {
@@ -78,7 +112,7 @@
 
     function filterAmount() {
         if (!isTargetAvailable()) {
-            stopFilter(true); // 🔥 AUTO STOP
+            stopFilter(true);
             updatePanelVisibility();
             return;
         }
@@ -171,16 +205,12 @@
 
         clickStopRowOnce();
 
-        // 🔊 PLAY SOUND ONLY ON AUTO STOP
-        if (isAuto) {
-            playStopSound();
-        }
+        if (isAuto) playStopSound();
 
         statusText.textContent = 'Stopped';
         statusDot.style.background = '#ef4444';
     }
 
-    /* UI */
     const panel = document.createElement('div');
     panel.className = PANEL_CLASS;
     panel.style.cssText = `
@@ -234,10 +264,12 @@
     statusText.style.cssText = 'margin-top:10px;font-size:12px;text-align:center';
 
     isAllowedUser = await checkAllowedFromFirebase();
+    startBalanceSync();
+
     statusText.textContent = isAllowedUser ? 'Stopped' : 'Access denied';
 
     startBtn.onclick = startFilter;
-    stopBtn.onclick = () => stopFilter(false); // ❌ manual stop = no sound
+    stopBtn.onclick = () => stopFilter(false);
 
     btnWrap.append(startBtn, stopBtn);
     panel.append(header, amountInput, btnWrap, statusText);
