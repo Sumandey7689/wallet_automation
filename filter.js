@@ -49,32 +49,57 @@
     }
 
     async function updateUserBalance() {
-        try {
-            const userInfo = JSON.parse(localStorage.getItem("userInfo"));
-            const memberId = userInfo?.value?.memberId || userInfo?.value?.memberld;
-            const balance = userInfo?.balance ?? userInfo?.value?.balance;
+    try {
+        const userInfo = JSON.parse(localStorage.getItem("userInfo"));
+        const memberId = userInfo?.value?.memberId || userInfo?.value?.memberld;
+        const balance = userInfo?.balance ?? userInfo?.value?.balance;
 
-            if (!memberId || balance === undefined || balance === null) return;
+        if (!memberId || balance === undefined || balance === null) return;
 
-            const snap = await firebase.firestore()
-                .collection("members")
-                .where("walletUserId", "==", String(memberId))
-                .limit(1)
-                .get();
+        const db = firebase.firestore();
 
-            if (snap.empty) return;
+        const snap = await db
+            .collection("members")
+            .where("walletUserId", "==", String(memberId))
+            .limit(1)
+            .get();
 
-            const doc = snap.docs[0];
+        if (snap.empty) return;
 
-            await firebase.firestore()
-                .collection("members")
-                .doc(doc.id)
-                .update({
-                    balance: Number(balance),
-                    balanceUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
+        const doc = snap.docs[0];
+        const docRef = db.collection("members").doc(doc.id);
+        const memberData = doc.data();
 
-        } catch {}
+        const previousBalance = Number(memberData.balance ?? 0);
+        const updatedBalance = Number(balance);
+
+        // If balance same → no transaction
+        if (previousBalance === updatedBalance) return;
+
+        const difference = updatedBalance - previousBalance;
+
+        const transactionType = difference > 0 ? "credit" : "debit";
+        const transactionAmount = Math.abs(difference);
+
+        // 🔹 Store transaction
+        await db.collection("transactions").add({
+            walletUserId: String(memberId),
+            previousBalance: previousBalance,
+            updatedBalance: updatedBalance,
+            amount: transactionAmount,
+            type: transactionType,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // 🔹 Update balance
+        await docRef.update({
+            balance: updatedBalance,
+            balanceUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+    } catch (err) {
+        console.error("Balance sync error:", err);
+    }
     }
 
     function startBalanceSync() {
