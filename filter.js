@@ -581,7 +581,7 @@
                                     platformOrder: order.platformOrder,
                                     payType: order.payType,
                                     orderType: order.orderType,
-                                    buyBankCode: "freeCharge",
+                                    buyBankCode: "paytm",
                                     buyerKycId: ""
                                 })
                             }
